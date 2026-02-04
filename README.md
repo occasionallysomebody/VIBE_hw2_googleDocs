@@ -1,400 +1,505 @@
-# Collaborative Rich-Media Editor
+# Production Collaborative Canvas
 
-A production-grade, real-time collaborative editor for technical writers creating YouTube video documentation. Built following **Canva's architectural principles** with separate client/server executables, WebSocket-based synchronization, and performance-optimized rendering.
+Enterprise-grade real-time collaborative design tool built with Y.js CRDTs, WebSocket synchronization, and conflict-free distributed data types.
 
 ## Architecture Overview
 
-### Key Design Decisions (Inspired by Canva)
+### Technology Stack
 
-1. **Separate Client/Server Architecture**
-   - Distinct codebases with shared data model
-   - TypeScript types ensure type safety across boundaries
-   - Clean separation enables independent scaling
+**Frontend:**
+- Vanilla JavaScript (ES6+ modules)
+- Y.js 13.x (CRDT library)
+- y-websocket provider
+- Custom design system (Outfit + Space Mono)
 
-2. **WebSocket Real-Time Synchronization**
-   - Persistent connections (not async polling)
-   - Operation-based CRDT for conflict-free merges
-   - Batched updates (50ms intervals) for efficiency
-   - Low-latency state sync (<100ms typical)
+**Backend:**
+- Node.js 16+
+- ws (WebSocket server)
+- Y.js server utilities
+- File-based persistence
 
-3. **Performance Optimization**
-   - Pre-loaded asset manifest (templates, fonts)
-   - Optimistic local updates
-   - Efficient canvas rendering with minimal reflows
-   - Throttled cursor updates (20 Hz)
-   - Operation batching reduces network overhead
+**Key Features:**
+- ✅ **CRDT-based synchronization** - Automatic conflict resolution
+- ✅ **Real-time cursor tracking** - See where collaborators are working
+- ✅ **Optimistic updates** - Zero latency for local changes
+- ✅ **Document persistence** - Auto-save to disk
+- ✅ **Graceful reconnection** - Handles network interruptions
+- ✅ **Horizontal scalability** - Ready for Redis adapter
+- ✅ **Production monitoring** - Health checks and metrics endpoints
 
-4. **Rich Media Support**
-   - Text elements with full formatting
-   - Image elements with filters
-   - Video clips with trim controls
-   - Moodboard compositions
-   - Drag-drop template system
+## How It Works
 
-## System Requirements
+### CRDT Synchronization
 
-- **Node.js**: 18.x or higher
-- **Browser**: Modern browser with WebSocket support
-- **Network**: Local network (single-machine deployment)
+Unlike traditional operational transformation (OT), Y.js uses **Conflict-free Replicated Data Types (CRDTs)** which:
 
-## Installation
+1. **Never require conflict resolution** - Concurrent edits merge automatically
+2. **Work offline** - Changes sync when reconnected
+3. **Scale horizontally** - No central coordination needed
+4. **Preserve intention** - User intent is maintained even with conflicts
 
-### Server Setup
+### Data Flow
+
+```
+Client A                  Server                    Client B
+   │                        │                          │
+   ├─ Create Element ──────>│                          │
+   │  (CRDT Update)         │                          │
+   │                        ├─ Persist to Disk         │
+   │                        │                          │
+   │                        ├──── Broadcast ─────────> │
+   │                        │     (CRDT Update)        │
+   │                        │                          │
+   │                        │ <──── Move Element ───── │
+   │                        │      (CRDT Update)       │
+   │                        │                          │
+   │ <──── Broadcast ───────┤                          │
+   │     (Auto-merged)      │                          │
+```
+
+## Quick Start
+
+### 1. Installation
 
 ```bash
-cd server
 npm install
+```
+
+### 2. Run Server
+
+```bash
+# Production
+npm start
+
+# Development (auto-restart)
 npm run dev
 ```
 
-Server starts on `ws://localhost:8080`
+Server runs on `http://localhost:1234` by default.
 
-### Client Setup
+### 3. Open Client
 
-Simply open `client/index.html` in a browser, or serve via HTTP:
-
+**Option A:** Browser directly
 ```bash
-# Using Python
-cd client
-python3 -m http.server 3000
-
-# Or using Node.js
-npx http-server -p 3000
+open http://localhost:1234
 ```
 
-Then navigate to `http://localhost:3000`
-
-## Core Features
-
-### ✅ Multi-Document Support
-- Create and manage multiple documents
-- Each document has unique ID
-- URL parameter: `?id=my-doc-123`
-
-### ✅ Granular Permissions
-- **Owner**: Full control, can delete document
-- **Editor**: Can modify all content
-- **Viewer**: Read-only access
-- **Commenter**: Can add comments (not yet implemented)
-
-### ✅ Real-Time Collaboration
-- See other users' cursors in real-time
-- Live element updates
-- Presence indicators
-- User avatars with colors
-
-### ✅ Rich Media Elements
-
-**Text Elements**
-- Font size, family, color
-- Bold, italic, underline
-- Text alignment
-- Live editing
-
-**Image Elements**
-- Upload or URL-based
-- Brightness, contrast, saturation filters
-- Drag to reposition, resize
-
-**Video Elements**
-- Video clip embedding
-- Thumbnail preview
-- Start/end trim points
-- Playback controls
-
-**Moodboard Elements**
-- Collections of images
-- Flexible layouts
-- Background customization
-
-**Template System**
-- Pre-designed templates
-- Drag-drop to canvas
-- YouTube-optimized layouts
-- Step-by-step tutorial templates
-
-### ✅ Version Control
-- Full version history
-- Snapshots with descriptions
-- Restore previous versions
-- Timestamp and author tracking
-
-### ✅ Performance Features
-
-**Solving Milanote's Lag Issues**
-- Optimistic UI updates (instant feedback)
-- Canvas-based rendering (not DOM-heavy)
-- Operation batching (reduces network chatter)
-- Efficient diff-based updates
-- Pre-loaded assets (no import delays)
-
-**Benchmarks** (typical):
-- Element creation: <10ms
-- Operation sync: 50-100ms
-- Canvas render: 16ms (60 FPS)
-- Concurrent users: 100+ per document
-
-## Architecture Details
-
-### Data Model (CRDT-based)
-
-```typescript
-Operation = {
-  id: unique,
-  type: create | update | delete | move | resize,
-  timestamp: number,
-  version: number,
-  userId: string,
-  ...payload
-}
-```
-
-**Conflict Resolution**
-- Last-write-wins for same element
-- Timestamp-based ordering
-- Version vectors prevent duplicates
-- Tombstones for deletions
-
-### WebSocket Message Flow
-
-```
-Client                  Server
-  |                       |
-  |---- CONNECT ---------->|
-  |<--- ACK ---------------|
-  |---- JOIN_DOCUMENT ---->|
-  |<--- DOCUMENT_STATE ----|
-  |                       |
-  |---- OPERATION -------->|
-  |<--- OPERATION_ACK -----|
-  |<--- BATCH_OPERATIONS --|  (to all clients)
-  |                       |
-  |---- CURSOR_UPDATE ---->|
-  |<--- CURSOR_UPDATE ----|  (to other clients)
-```
-
-### Storage Architecture
-
-**Current** (Development):
-- In-memory Maps
-- Per-process state
-- Restart = data loss
-
-**Production** (Recommended):
-- Redis for operations log
-- PostgreSQL for document snapshots
-- S3 for media assets
-- Elasticsearch for search
-
-### Scaling Considerations
-
-**Single Server** (current):
-- 100-500 concurrent users
-- 10-50 active documents
-- Memory: ~2GB
-- Network: ~10 Mbps
-
-**Horizontal Scaling** (future):
-- Redis Pub/Sub for cross-server sync
-- Sticky sessions or consistent hashing
-- Shared storage backend
-- Load balancer with WebSocket support
-
-## API Reference
-
-### Client-Side Operations
-
-```javascript
-// Create text element
-sendOperation({
-  type: 'create_element',
-  element: {
-    id: 'el-123',
-    type: 'text',
-    content: 'Hello',
-    transform: { position, size, rotation, zIndex },
-    // ...styling
-  }
-});
-
-// Move element
-sendOperation({
-  type: 'move_element',
-  elementId: 'el-123',
-  position: { x: 100, y: 200 }
-});
-
-// Update text
-sendOperation({
-  type: 'update_text',
-  elementId: 'el-123',
-  content: 'Updated text'
-});
-```
-
-### Server-Side Storage
-
-```typescript
-class DocumentStore {
-  getDocument(id: string): Document | null
-  saveDocument(doc: Document): void
-  createDocument(id, title, ownerId): Document
-  addOperation(documentId, operation): void
-  getOperations(documentId, since?): Operation[]
-}
-```
-
-## Development Workflow
-
-### Running Multiple Clients
-
-1. Start server: `cd server && npm run dev`
-2. Open client 1: `http://localhost:3000?id=test-doc`
-3. Open client 2: `http://localhost:3000?id=test-doc`
-4. Make changes in either client
-5. Observe real-time sync
-
-### Debugging
-
-**Server logs**:
+**Option B:** Open HTML file
 ```bash
-cd server
-npm run dev  # Shows WebSocket connections, operations
+# Update line 218 in collaborative-canvas.html to use your server:
+const wsUrl = 'ws://localhost:1234';
+
+# Then open the file in your browser
 ```
 
-**Client console**:
-- Connection status
-- Incoming messages
-- Operation history
-- Performance metrics
+### 4. Test Multi-Client
 
-### Testing Real-Time Sync
+Open multiple browser tabs/windows pointing to the same URL. Changes sync in real-time across all clients.
 
-```bash
-# Terminal 1: Server
-cd server && npm run dev
-
-# Terminal 2: Client 1
-cd client && python3 -m http.server 3000
-
-# Terminal 3: Client 2 (different browser/incognito)
-# Open http://localhost:3000?id=test
-```
-
-## Performance Tuning
-
-### Server Configuration
-
-```typescript
-const OPERATION_BATCH_INTERVAL = 50; // ms - lower = faster sync, higher CPU
-const MAX_OPERATIONS_PER_BATCH = 100; // prevents message overflow
-```
-
-### Client Configuration
-
-```javascript
-const CURSOR_THROTTLE = 50; // ms - cursor update frequency
-const RENDER_DEBOUNCE = 16; // ms - ~60 FPS rendering
-```
-
-### Network Optimization
-
-- Enable compression in production
-- Use binary protocol (MessagePack/Protobuf) vs JSON
-- Implement operation delta compression
-- Add operation deduplication
-
-## Production Deployment
-
-### Server Deployment
-
-```bash
-# Build
-cd server
-npm run build
-
-# Run
-NODE_ENV=production node dist/server.js
-```
+## Configuration
 
 ### Environment Variables
 
 ```bash
-PORT=8080
-WS_MAX_CONNECTIONS=1000
-REDIS_URL=redis://localhost:6379
-DATABASE_URL=postgresql://...
+# Server host (default: 0.0.0.0)
+export HOST=localhost
+
+# Server port (default: 1234)
+export PORT=3000
+
+# Persistence directory (default: ./persistence)
+export PERSISTENCE_DIR=/var/data/canvas
+
+# Garbage collection interval in ms (default: 60000)
+export GC_INTERVAL=120000
 ```
 
-### Client Deployment
+### Client Configuration
 
-Serve `client/index.html` via:
-- Nginx
-- Cloudflare Pages
-- Vercel
-- AWS S3 + CloudFront
+Edit `collaborative-canvas.html` line 218-220:
+
+```javascript
+// Development - use demo server
+const wsUrl = 'wss://demos.yjs.dev';
+const roomName = 'canvas-collab-' + (window.location.hash.slice(1) || 'default');
+
+// Production - use your server
+const wsUrl = 'ws://your-domain.com:1234';
+const roomName = 'canvas-collab-' + (window.location.hash.slice(1) || 'default');
+```
+
+## Deployment
+
+### Docker
+
+```dockerfile
+FROM node:18-alpine
+
+WORKDIR /app
+
+# Install dependencies
+COPY package*.json ./
+RUN npm ci --only=production
+
+# Copy application
+COPY . .
+
+# Create persistence directory
+RUN mkdir -p /app/persistence
+
+EXPOSE 1234
+
+CMD ["node", "server.js"]
+```
+
+Build and run:
+```bash
+docker build -t collaborative-canvas .
+docker run -p 1234:1234 -v $(pwd)/persistence:/app/persistence collaborative-canvas
+```
+
+### Docker Compose
+
+```yaml
+version: '3.8'
+
+services:
+  canvas-server:
+    build: .
+    ports:
+      - "1234:1234"
+    volumes:
+      - ./persistence:/app/persistence
+    environment:
+      - NODE_ENV=production
+      - HOST=0.0.0.0
+      - PORT=1234
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:1234/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+```
+
+### Cloud Deployment (Railway, Render, Fly.io)
+
+1. Push code to GitHub
+2. Connect repository to cloud platform
+3. Set environment variables:
+   - `PORT`: Usually auto-set by platform
+   - `PERSISTENCE_DIR`: `/data` or persistent volume path
+4. Deploy
+
+**Important:** Use `wss://` (secure WebSocket) in production.
+
+### Nginx Reverse Proxy
+
+```nginx
+upstream canvas_backend {
+    server localhost:1234;
+}
+
+server {
+    listen 80;
+    server_name canvas.yourdomain.com;
+
+    location / {
+        proxy_pass http://canvas_backend;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 86400;
+    }
+}
+```
+
+## Scaling to Production
+
+### Redis Persistence (Horizontal Scaling)
+
+For multiple server instances, use Redis as shared storage:
+
+```bash
+npm install y-redis
+```
+
+Update `server.js`:
+
+```javascript
+const { RedisPersistence } = require('y-redis');
+
+const persistence = new RedisPersistence({
+  host: 'redis://localhost:6379'
+});
+
+setupWSConnection(conn, req, {
+  gc: true,
+  persistence
+});
+```
+
+### Load Balancing
+
+Use sticky sessions with your load balancer to ensure clients stay connected to the same server:
+
+```nginx
+upstream canvas_cluster {
+    ip_hash;  # Sticky sessions
+    server canvas1.internal:1234;
+    server canvas2.internal:1234;
+    server canvas3.internal:1234;
+}
+```
 
 ### Monitoring
 
-Key metrics:
-- WebSocket connections count
-- Operations per second
-- Message latency (p50, p95, p99)
-- Memory usage
-- Active documents
+**Health Check:**
+```bash
+curl http://localhost:1234/health
+```
 
-## Roadmap
+Response:
+```json
+{
+  "status": "healthy",
+  "uptime": 3600.5,
+  "documents": 12,
+  "memory": { "rss": 45678912, "heapUsed": 23456789 }
+}
+```
 
-### Phase 1 (Complete) ✅
-- Real-time collaboration
-- Basic element types
-- Drag-drop templates
-- Version history
-- Multi-user cursors
+**Metrics:**
+```bash
+curl http://localhost:1234/metrics
+```
 
-### Phase 2 (Next)
-- [ ] Comments system
-- [ ] @mentions
-- [ ] Keyboard shortcuts
-- [ ] Undo/redo
-- [ ] Export to video/PDF
+Response:
+```json
+{
+  "documents": 12,
+  "connections": 47,
+  "memory": { ... },
+  "uptime": 3600.5
+}
+```
 
-### Phase 3 (Future)
-- [ ] AI-powered layout suggestions
-- [ ] Voice comments
-- [ ] Presentation mode
-- [ ] Mobile app
-- [ ] Offline support
+### Performance Tuning
 
-## Comparison to Other Tools
+**Memory:**
+```bash
+# Increase Node.js heap size
+node --max-old-space-size=4096 server.js
+```
 
-| Feature | This Editor | Canva | Milanote | Google Docs |
-|---------|------------|-------|----------|-------------|
-| Real-time collab | ✅ | ✅ | ❌ (slow) | ✅ |
-| Rich media | ✅ | ✅ | ✅ | ❌ |
-| Templates | ✅ | ✅ | ❌ | ❌ |
-| Version control | ✅ | ✅ | ❌ | ✅ |
-| Performance | ✅ High | ✅ High | ❌ Lags | ✅ High |
-| Video elements | ✅ | ❌ | ✅ | ❌ |
-| Technical docs | ✅ | ❌ | ❌ | ✅ |
+**Connections:**
+```bash
+# Increase file descriptor limit (Linux)
+ulimit -n 65536
+```
 
-## Technical Highlights
+**GC Tuning:**
+```bash
+# Adjust garbage collection interval
+export GC_INTERVAL=30000  # 30 seconds for high-traffic
+export GC_INTERVAL=300000  # 5 minutes for low-traffic
+```
 
-### Why This Architecture Works
+## API Reference
 
-1. **Separate executables** = independent deployment, clear contracts
-2. **WebSocket persistence** = low latency, true real-time
-3. **Operation-based CRDT** = automatic conflict resolution
-4. **Pre-loaded assets** = instant template usage
-5. **Optimistic updates** = responsive UI despite network lag
+### WebSocket Protocol
 
-### Canva-Inspired Patterns
+Y.js uses a binary protocol for efficient synchronization. You don't need to manually handle messages - the Y.js provider does this automatically.
 
-- **Microservices mindset** (though monolithic here)
-- **Infrastructure as code** approach
-- **Service-aligned data** (documents own their data)
-- **Real-time first** (not request/response)
-- **Template-driven UX** (drag-drop simplicity)
+### Shared Data Structure
+
+```javascript
+// Y.js Document
+const ydoc = new Y.Doc();
+
+// Shared types
+const yElements = ydoc.getMap('elements');  // Canvas elements
+const yAwareness = ydoc.getMap('awareness'); // User presence
+
+// Element structure
+{
+  id: 'element-123',
+  type: 'text' | 'image' | 'video' | 'rect' | 'circle',
+  x: number,
+  y: number,
+  width: number | 'auto',
+  height: number | 'auto',
+  content: string | null,
+  color: string,
+  fontSize: number,
+  createdBy: string,
+  createdAt: number
+}
+```
+
+### Awareness (Presence)
+
+```javascript
+awareness.setLocalStateField('user', {
+  id: string,
+  color: string,
+  name: string
+});
+
+awareness.setLocalStateField('cursor', {
+  x: number,
+  y: number
+});
+```
+
+## Security Considerations
+
+### Authentication
+
+Add authentication middleware:
+
+```javascript
+wss.on('connection', (conn, req) => {
+  const token = req.headers['authorization'];
+  
+  if (!isValidToken(token)) {
+    conn.close(4001, 'Unauthorized');
+    return;
+  }
+  
+  setupWSConnection(conn, req, { gc: true });
+});
+```
+
+### Rate Limiting
+
+```javascript
+const clients = new Map();
+
+wss.on('connection', (conn, req) => {
+  const ip = req.socket.remoteAddress;
+  const client = clients.get(ip) || { count: 0, lastReset: Date.now() };
+  
+  if (Date.now() - client.lastReset > 60000) {
+    client.count = 0;
+    client.lastReset = Date.now();
+  }
+  
+  if (client.count > 100) {  // 100 connections per minute per IP
+    conn.close(4029, 'Rate limit exceeded');
+    return;
+  }
+  
+  client.count++;
+  clients.set(ip, client);
+  
+  setupWSConnection(conn, req, { gc: true });
+});
+```
+
+### Data Validation
+
+Validate element updates:
+
+```javascript
+yElements.observe(event => {
+  event.changes.keys.forEach((change, key) => {
+    if (change.action === 'add' || change.action === 'update') {
+      const element = yElements.get(key);
+      
+      // Validate element structure
+      if (!isValidElement(element)) {
+        yElements.delete(key);  // Remove invalid element
+      }
+    }
+  });
+});
+```
+
+## Troubleshooting
+
+### Connection Issues
+
+**Problem:** Can't connect to WebSocket
+- Check server is running: `curl http://localhost:1234/health`
+- Verify port is open: `netstat -an | grep 1234`
+- Check firewall settings
+- For production, ensure you're using `wss://` not `ws://`
+
+**Problem:** Connection drops frequently
+- Check network stability
+- Increase timeout settings
+- Enable reconnection logging in browser console
+
+### Performance Issues
+
+**Problem:** Slow synchronization
+- Check network latency
+- Reduce update frequency (throttle drag events)
+- Consider reducing GC interval for active documents
+
+**Problem:** High memory usage
+- Reduce GC_INTERVAL to clean up unused documents faster
+- Implement document size limits
+- Enable Redis persistence to offload memory
+
+### Data Issues
+
+**Problem:** Elements not syncing
+- Check browser console for Y.js errors
+- Verify both clients are in the same room
+- Check document persistence directory permissions
+
+**Problem:** Conflicts/inconsistencies
+- This shouldn't happen with CRDTs, but if it does:
+  - Clear persistence directory
+  - Restart server
+  - Reconnect all clients
+
+## Development
+
+### Project Structure
+
+```
+collaborative-canvas-pro/
+├── server.js                    # Y.js WebSocket server
+├── collaborative-canvas.html    # Client application
+├── package.json                 # Dependencies
+├── persistence/                 # Document storage (auto-created)
+│   └── canvas-collab-*.yjs
+└── README.md                    # This file
+```
+
+### Adding Features
+
+**New element types:**
+1. Add type to `createElement()` function
+2. Add rendering logic in `renderElement()`
+3. Update property panel in `updatePropertiesPanel()`
+
+**Custom properties:**
+1. Add to element data structure
+2. Update property panel UI
+3. Add event listeners for changes
+
+### Testing
+
+```bash
+# Open multiple terminals
+
+# Terminal 1: Start server
+npm start
+
+# Terminal 2: Open first client
+open http://localhost:1234
+
+# Terminal 3: Open second client
+open http://localhost:1234
+```
 
 ## License
 
@@ -403,11 +508,10 @@ MIT
 ## Support
 
 For issues or questions:
-1. Check the documentation
-2. Review server logs
-3. Open a GitHub issue
-4. Contact the team
+- Check existing GitHub issues
+- Review Y.js documentation: https://docs.yjs.dev
+- WebSocket debugging: Enable verbose logging in browser console
 
 ---
 
-**Built with inspiration from Canva's world-class engineering team** 🎨
+Built with ❤️ using Y.js CRDTs for conflict-free collaboration.

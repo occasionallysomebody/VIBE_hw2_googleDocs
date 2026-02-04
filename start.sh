@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Collaborative Editor - Quick Start Script
-# Sets up and runs both server and client
+# Sets up and runs the server (which serves the client UI)
 
 set -e
 
@@ -25,10 +25,9 @@ echo -e "${GREEN}✓${NC} Node.js $(node --version) found"
 # Setup server
 echo ""
 echo -e "${BLUE}Setting up server...${NC}"
-cd server
 
 if [ ! -d "node_modules" ]; then
-    echo "Installing server dependencies..."
+    echo "Installing dependencies..."
     npm install
 else
     echo "Dependencies already installed"
@@ -47,45 +46,19 @@ echo "Server PID: $SERVER_PID"
 # Wait for server to start
 sleep 2
 
-# Setup client
-cd ../client
-echo ""
-echo -e "${BLUE}Starting client server...${NC}"
-
-# Check for Python
-if command -v python3 &> /dev/null; then
-    echo "Using Python HTTP server on port 3000"
-    python3 -m http.server 3000 &
-    CLIENT_PID=$!
-elif command -v python &> /dev/null; then
-    echo "Using Python HTTP server on port 3000"
-    python -m http.server 3000 &
-    CLIENT_PID=$!
-elif command -v npx &> /dev/null; then
-    echo "Using Node.js HTTP server on port 3000"
-    npx http-server -p 3000 &
-    CLIENT_PID=$!
-else
-    echo "⚠️  No HTTP server found. Please open client/index.html manually."
-    CLIENT_PID=0
-fi
-
-echo ""
-echo -e "${GREEN}✓${NC} Client ready"
-
 echo ""
 echo "=================================="
 echo "✅ System is running!"
 echo ""
-echo "📡 WebSocket Server: ws://localhost:8080"
-echo "🌐 Client Interface: http://localhost:3000"
+echo "📡 WebSocket Server: ws://localhost:1234"
+echo "🌐 Client Interface: http://localhost:1234"
 echo ""
 echo "To test collaboration:"
-echo "  1. Open http://localhost:3000?id=test-doc"
+echo "  1. Open http://localhost:1234?id=test-doc"
 echo "  2. Open another browser window with the same URL"
 echo "  3. Make changes and watch them sync in real-time!"
 echo ""
-echo "Press Ctrl+C to stop all services"
+echo "Press Ctrl+C to stop the service"
 echo "=================================="
 
 # Cleanup on exit
@@ -93,10 +66,7 @@ cleanup() {
     echo ""
     echo "Shutting down..."
     kill $SERVER_PID 2>/dev/null || true
-    if [ $CLIENT_PID -ne 0 ]; then
-        kill $CLIENT_PID 2>/dev/null || true
-    fi
-    echo "✓ Services stopped"
+    echo "✓ Service stopped"
     exit 0
 }
 

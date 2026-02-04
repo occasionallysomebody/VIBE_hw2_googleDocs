@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Design Tool</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: #1a1a1a;
+            color: #fff;
+            overflow: hidden;
+        }
+
+        .container {
+            display: flex;
+            height: 100vh;
+        }
+
+        .sidebar {
+            width: 300px;
+            background: #2a2a2a;
+            padding: 20px;
+            border-right: 1px solid #3a3a3a;
+        }
+
+        .sidebar h2 {
+            font-size: 18px;
+            margin-bottom: 20px;
+            color: #fff;
+        }
+
+        .toolbar {
+            background: #2a2a2a;
+            padding: 15px 20px;
+            border-bottom: 1px solid #3a3a3a;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-weight: 500;
+        }
+
+        .btn-primary {
+            background: #4A90E2;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #357ABD;
+        }
+
+        .btn-secondary {
+            background: #3a3a3a;
+            color: white;
+        }
+
+        .btn-secondary:hover {
+            background: #4a4a4a;
+        }
+
+        .canvas-area {
+            flex: 1;
+            background: #1a1a1a;
+            position: relative;
+            overflow: auto;
+        }
+
+        .canvas {
+            background: #2a2a2a;
+            min-height: 600px;
+            margin: 40px;
+            position: relative;
+            border-radius: 4px;
+        }
+
+        .properties-panel {
+            width: 300px;
+            background: #2a2a2a;
+            padding: 20px;
+            border-left: 1px solid #3a3a3a;
+        }
+
+        .properties-panel h2 {
+            font-size: 18px;
+            margin-bottom: 15px;
+        }
+
+        .placeholder-text {
+            color: #666;
+            font-size: 14px;
+        }
+
+        .canvas-element {
+            position: absolute;
+            cursor: move;
+            padding: 10px;
+            border: 2px solid transparent;
+            transition: border-color 0.2s;
+        }
+
+        .canvas-element:hover {
+            border-color: #4A90E2;
+        }
+
+        .canvas-element.selected {
+            border-color: #4A90E2;
+            background: rgba(74, 144, 226, 0.1);
+        }
+
+        .text-element {
+            font-size: 16px;
+            color: #fff;
+            min-width: 100px;
+        }
+
+        .image-element {
+            width: 200px;
+            height: 150px;
+            background: #3a3a3a;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #666;
+        }
+
+        .video-element {
+            width: 300px;
+            height: 200px;
+            background: #3a3a3a;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #666;
+        }
+
+        .status-indicator {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: #999;
+            font-size: 13px;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #4CAF50;
+        }
+
+        .status-dot.disconnected {
+            background: #f44336;
+        }
+
+        .property-group {
+            margin-bottom: 20px;
+        }
+
+        .property-label {
+            font-size: 12px;
+            color: #999;
+            margin-bottom: 8px;
+            display: block;
+        }
+
+        .property-input {
+            width: 100%;
+            padding: 8px;
+            background: #3a3a3a;
+            border: 1px solid #4a4a4a;
+            border-radius: 4px;
+            color: #fff;
+            font-size: 14px;
+        }
+
+        .delete-btn {
+            margin-top: 20px;
+            background: #f44336;
+            color: white;
+            width: 100%;
+        }
+
+        .delete-btn:hover {
+            background: #d32f2f;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="sidebar">
+            <h2>Templates</h2>
+            <div class="placeholder-text">Template options will appear here</div>
+        </div>
+
+        <div style="flex: 1; display: flex; flex-direction: column;">
+            <div class="toolbar">
+                <button class="btn btn-primary" id="addTextBtn">Add Text</button>
+                <button class="btn btn-secondary" id="addImageBtn">Add Image</button>
+                <button class="btn btn-secondary" id="addVideoBtn">Add Video</button>
+                <button class="btn btn-secondary" id="saveVersionBtn">Save Version</button>
+            </div>
+
+            <div class="canvas-area">
+                <div class="canvas" id="canvas"></div>
+            </div>
+        </div>
+
+        <div class="properties-panel">
+            <h2>Properties</h2>
+            <div id="propertiesContent">
+                <div class="placeholder-text">Select an element to edit properties</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="status-indicator">
+        <span class="status-dot" id="statusDot"></span>
+        <span id="statusText">Connected</span>
+    </div>
+
+    <script>
+        let selectedElement = null;
+        let elementCounter = 0;
+        let isDragging = false;
+        let dragStartX;
+        let dragStartY;
+        let elementStartX;
+        let elementStartY;
+
+        const canvas = document.getElementById('canvas');
+        const propertiesContent = document.getElementById('propertiesContent');
+
+        // Add Text functionality
+        document.getElementById('addTextBtn').addEventListener('click', () => {
+            elementCounter++;
+            const textElement = document.createElement('div');
+            textElement.className = 'canvas-element text-element';
+            textElement.contentEditable = true;
+            textElement.textContent = 'Double-click to edit text';
+            textElement.style.left = '50px';
+            textElement.style.top = (50 + elementCounter * 40) + 'px';
+            textElement.dataset.type = 'text';
+            
+            canvas.appendChild(textElement);
+            addDragListeners(textElement);
+            selectElement(textElement);
+        });
+
+        // Add Image functionality
+        document.getElementById('addImageBtn').addEventListener('click', () => {
+            elementCounter++;
+            const imageElement = document.createElement('div');
+            imageElement.className = 'canvas-element image-element';
+            imageElement.innerHTML = '📷 Image Placeholder';
+            imageElement.style.left = '100px';
+            imageElement.style.top = (50 + elementCounter * 40) + 'px';
+            imageElement.dataset.type = 'image';
+            
+            canvas.appendChild(imageElement);
+            addDragListeners(imageElement);
+            selectElement(imageElement);
+        });
+
+        // Add Video functionality
+        document.getElementById('addVideoBtn').addEventListener('click', () => {
+            elementCounter++;
+            const videoElement = document.createElement('div');
+            videoElement.className = 'canvas-element video-element';
+            videoElement.innerHTML = '🎥 Video Placeholder';
+            videoElement.style.left = '150px';
+            videoElement.style.top = (50 + elementCounter * 40) + 'px';
+            videoElement.dataset.type = 'video';
+            
+            canvas.appendChild(videoElement);
+            addDragListeners(videoElement);
+            selectElement(videoElement);
+        });
+
+        // Save Version functionality
+        document.getElementById('saveVersionBtn').addEventListener('click', () => {
+            const timestamp = new Date().toLocaleString();
+            alert(`Version saved at ${timestamp}\n\nElements on canvas: ${canvas.children.length}`);
+            
+            // Flash the status to show save
+            const statusDot = document.getElementById('statusDot');
+            const statusText = document.getElementById('statusText');
+            statusText.textContent = 'Saving...';
+            setTimeout(() => {
+                statusText.textContent = 'Connected';
+            }, 1000);
+        });
+
+        // Drag and drop functionality
+        function addDragListeners(element) {
+            element.addEventListener('mousedown', dragStart);
+            element.addEventListener('click', (e) => {
+                e.stopPropagation();
+                selectElement(element);
+            });
+        }
+
+        function dragStart(e) {
+            if (e.target.contentEditable === 'true' && e.target === document.activeElement) {
+                return; // Don't drag while editing text
+            }
+
+            if (e.target.classList.contains('canvas-element')) {
+                isDragging = true;
+                selectedElement = e.target;
+                selectElement(selectedElement);
+
+                // Record where the mouse started
+                dragStartX = e.clientX;
+                dragStartY = e.clientY;
+
+                // Record where the element started
+                elementStartX = parseInt(selectedElement.style.left) || 0;
+                elementStartY = parseInt(selectedElement.style.top) || 0;
+            }
+        }
+
+        document.addEventListener('mousemove', drag);
+        document.addEventListener('mouseup', dragEnd);
+
+        function drag(e) {
+            if (isDragging && selectedElement) {
+                e.preventDefault();
+                
+                // Calculate how far the mouse has moved
+                const deltaX = e.clientX - dragStartX;
+                const deltaY = e.clientY - dragStartY;
+
+                // Apply that movement to the element's starting position
+                selectedElement.style.left = (elementStartX + deltaX) + 'px';
+                selectedElement.style.top = (elementStartY + deltaY) + 'px';
+            }
+        }
+
+        function dragEnd(e) {
+            isDragging = false;
+        }
+
+        // Selection and properties
+        function selectElement(element) {
+            // Deselect all
+            document.querySelectorAll('.canvas-element').forEach(el => {
+                el.classList.remove('selected');
+            });
+
+            // Select clicked element
+            element.classList.add('selected');
+            selectedElement = element;
+
+            // Update properties panel
+            updatePropertiesPanel(element);
+        }
+
+        function updatePropertiesPanel(element) {
+            const type = element.dataset.type;
+            
+            let html = `<div class="property-group">
+                <label class="property-label">Element Type</label>
+                <div style="color: #fff; text-transform: capitalize;">${type}</div>
+            </div>`;
+
+            if (type === 'text') {
+                html += `<div class="property-group">
+                    <label class="property-label">Font Size</label>
+                    <input type="number" class="property-input" value="16" id="fontSizeInput">
+                </div>
+                <div class="property-group">
+                    <label class="property-label">Color</label>
+                    <input type="color" class="property-input" value="#ffffff" id="colorInput">
+                </div>`;
+            }
+
+            html += `<button class="btn delete-btn" id="deleteBtn">Delete Element</button>`;
+            
+            propertiesContent.innerHTML = html;
+
+            // Add delete functionality
+            document.getElementById('deleteBtn')?.addEventListener('click', () => {
+                if (selectedElement) {
+                    selectedElement.remove();
+                    selectedElement = null;
+                    propertiesContent.innerHTML = '<div class="placeholder-text">Select an element to edit properties</div>';
+                }
+            });
+
+            // Add property change listeners
+            if (type === 'text') {
+                document.getElementById('fontSizeInput')?.addEventListener('input', (e) => {
+                    if (selectedElement) {
+                        selectedElement.style.fontSize = e.target.value + 'px';
+                    }
+                });
+
+                document.getElementById('colorInput')?.addEventListener('input', (e) => {
+                    if (selectedElement) {
+                        selectedElement.style.color = e.target.value;
+                    }
+                });
+            }
+        }
+
+        // Deselect when clicking canvas
+        canvas.addEventListener('click', (e) => {
+            if (e.target === canvas) {
+                document.querySelectorAll('.canvas-element').forEach(el => {
+                    el.classList.remove('selected');
+                });
+                selectedElement = null;
+                propertiesContent.innerHTML = '<div class="placeholder-text">Select an element to edit properties</div>';
+            }
+        });
+    </script>
+</body>
+</html>
