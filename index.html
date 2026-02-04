@@ -1,0 +1,937 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Collaborative Rich-Media Editor</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      overflow: hidden;
+      background: #1a1a1a;
+    }
+    
+    /* Main Layout */
+    .app-container {
+      display: flex;
+      height: 100vh;
+      width: 100vw;
+    }
+    
+    /* Sidebar */
+    .sidebar {
+      width: 280px;
+      background: #2a2a2a;
+      border-right: 1px solid #3a3a3a;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    
+    .sidebar-header {
+      padding: 16px;
+      border-bottom: 1px solid #3a3a3a;
+    }
+    
+    .sidebar-header h2 {
+      color: #fff;
+      font-size: 16px;
+      font-weight: 600;
+    }
+    
+    .templates-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      padding: 16px;
+      overflow-y: auto;
+    }
+    
+    .template-card {
+      background: #3a3a3a;
+      border-radius: 8px;
+      padding: 12px;
+      cursor: grab;
+      transition: all 0.2s;
+      border: 2px solid transparent;
+    }
+    
+    .template-card:hover {
+      background: #4a4a4a;
+      border-color: #3b82f6;
+    }
+    
+    .template-card:active {
+      cursor: grabbing;
+    }
+    
+    .template-thumbnail {
+      width: 100%;
+      height: 80px;
+      background: #2a2a2a;
+      border-radius: 4px;
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #666;
+      font-size: 12px;
+    }
+    
+    .template-name {
+      color: #fff;
+      font-size: 12px;
+      font-weight: 500;
+    }
+    
+    /* Canvas Area */
+    .canvas-container {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      background: #1a1a1a;
+      position: relative;
+    }
+    
+    .toolbar {
+      height: 48px;
+      background: #2a2a2a;
+      border-bottom: 1px solid #3a3a3a;
+      display: flex;
+      align-items: center;
+      padding: 0 16px;
+      gap: 8px;
+    }
+    
+    .toolbar-btn {
+      background: #3a3a3a;
+      border: none;
+      color: #fff;
+      padding: 8px 16px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 14px;
+      transition: background 0.2s;
+    }
+    
+    .toolbar-btn:hover {
+      background: #4a4a4a;
+    }
+    
+    .toolbar-btn.primary {
+      background: #3b82f6;
+    }
+    
+    .toolbar-btn.primary:hover {
+      background: #2563eb;
+    }
+    
+    .canvas-wrapper {
+      flex: 1;
+      overflow: auto;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 40px;
+    }
+    
+    .canvas {
+      background: #fff;
+      box-shadow: 0 4px 24px rgba(0, 0, 0, 0.3);
+      position: relative;
+      transform-origin: center;
+    }
+    
+    /* Elements */
+    .element {
+      position: absolute;
+      cursor: move;
+      user-select: none;
+    }
+    
+    .element.selected {
+      outline: 2px solid #3b82f6;
+      outline-offset: 2px;
+    }
+    
+    .element.locked {
+      cursor: not-allowed;
+      opacity: 0.6;
+    }
+    
+    .element-text {
+      white-space: pre-wrap;
+      word-wrap: break-word;
+      padding: 8px;
+    }
+    
+    .element-image {
+      object-fit: cover;
+      width: 100%;
+      height: 100%;
+    }
+    
+    .element-video {
+      width: 100%;
+      height: 100%;
+    }
+    
+    .resize-handle {
+      position: absolute;
+      width: 12px;
+      height: 12px;
+      background: #3b82f6;
+      border: 2px solid #fff;
+      border-radius: 50%;
+      cursor: nwse-resize;
+    }
+    
+    .resize-handle.se {
+      bottom: -6px;
+      right: -6px;
+    }
+    
+    /* Cursors (other users) */
+    .remote-cursor {
+      position: absolute;
+      pointer-events: none;
+      z-index: 10000;
+      transition: all 0.1s ease-out;
+    }
+    
+    .cursor-pointer {
+      width: 20px;
+      height: 20px;
+      transform: translate(-2px, -2px);
+    }
+    
+    .cursor-label {
+      background: rgba(0, 0, 0, 0.8);
+      color: #fff;
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 12px;
+      margin-left: 20px;
+      white-space: nowrap;
+    }
+    
+    /* Properties Panel */
+    .properties-panel {
+      width: 280px;
+      background: #2a2a2a;
+      border-left: 1px solid #3a3a3a;
+      padding: 16px;
+      overflow-y: auto;
+    }
+    
+    .properties-panel h3 {
+      color: #fff;
+      font-size: 14px;
+      font-weight: 600;
+      margin-bottom: 16px;
+    }
+    
+    .property-group {
+      margin-bottom: 20px;
+    }
+    
+    .property-label {
+      color: #999;
+      font-size: 12px;
+      margin-bottom: 8px;
+      display: block;
+    }
+    
+    .property-input {
+      width: 100%;
+      background: #3a3a3a;
+      border: 1px solid #4a4a4a;
+      color: #fff;
+      padding: 8px;
+      border-radius: 4px;
+      font-size: 14px;
+    }
+    
+    .property-input:focus {
+      outline: none;
+      border-color: #3b82f6;
+    }
+    
+    /* Active Users */
+    .active-users {
+      display: flex;
+      gap: 8px;
+      margin-left: auto;
+    }
+    
+    .user-avatar {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+      font-size: 12px;
+      font-weight: 600;
+    }
+    
+    /* Connection Status */
+    .connection-status {
+      position: fixed;
+      bottom: 16px;
+      right: 16px;
+      background: #2a2a2a;
+      padding: 8px 16px;
+      border-radius: 20px;
+      color: #fff;
+      font-size: 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    }
+    
+    .status-indicator {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #10b981;
+    }
+    
+    .status-indicator.disconnected {
+      background: #ef4444;
+    }
+  </style>
+</head>
+<body>
+  <div class="app-container">
+    <!-- Sidebar: Templates -->
+    <div class="sidebar">
+      <div class="sidebar-header">
+        <h2>Templates</h2>
+      </div>
+      <div class="templates-grid" id="templates-grid">
+        <!-- Templates loaded dynamically -->
+      </div>
+    </div>
+    
+    <!-- Main Canvas Area -->
+    <div class="canvas-container">
+      <div class="toolbar">
+        <button class="toolbar-btn primary" id="add-text-btn">Add Text</button>
+        <button class="toolbar-btn" id="add-image-btn">Add Image</button>
+        <button class="toolbar-btn" id="add-video-btn">Add Video</button>
+        <button class="toolbar-btn" id="save-version-btn">Save Version</button>
+        <div class="active-users" id="active-users"></div>
+      </div>
+      
+      <div class="canvas-wrapper" id="canvas-wrapper">
+        <div class="canvas" id="canvas">
+          <!-- Elements rendered here -->
+        </div>
+      </div>
+      
+      <!-- Remote cursors -->
+      <div id="cursors-layer"></div>
+    </div>
+    
+    <!-- Properties Panel -->
+    <div class="properties-panel">
+      <h3>Properties</h3>
+      <div id="properties-content">
+        <p style="color: #666; font-size: 14px;">Select an element to edit properties</p>
+      </div>
+    </div>
+  </div>
+  
+  <!-- Connection Status -->
+  <div class="connection-status">
+    <div class="status-indicator" id="status-indicator"></div>
+    <span id="status-text">Connecting...</span>
+  </div>
+
+  <script type="module">
+    // Client-side collaborative editor
+    
+    const WS_URL = 'ws://localhost:8080';
+    const DOCUMENT_ID = 'doc-' + (new URLSearchParams(window.location.search).get('id') || 'default');
+    
+    // Generate user identity
+    const USER = {
+      id: 'user-' + Math.random().toString(36).substr(2, 9),
+      name: 'User ' + Math.floor(Math.random() * 1000),
+      color: '#' + Math.floor(Math.random() * 16777215).toString(16)
+    };
+    
+    // State management
+    class EditorState {
+      constructor() {
+        this.document = null;
+        this.elements = new Map();
+        this.selectedElementIds = new Set();
+        this.activeUsers = new Map();
+        this.remoteCursors = new Map();
+        this.ws = null;
+        this.connected = false;
+        this.operationVersion = 0;
+        this.templates = [];
+      }
+    }
+    
+    const state = new EditorState();
+    
+    // WebSocket connection with auto-reconnect
+    class CollaborationClient {
+      constructor() {
+        this.reconnectAttempts = 0;
+        this.maxReconnectAttempts = 10;
+        this.reconnectDelay = 1000;
+        this.connect();
+      }
+      
+      connect() {
+        this.ws = new WebSocket(WS_URL);
+        
+        this.ws.onopen = () => {
+          console.log('Connected to collaboration server');
+          this.reconnectAttempts = 0;
+          state.connected = true;
+          updateConnectionStatus(true);
+          
+          // Send connect message
+          this.send({
+            type: 'connect',
+            user: USER,
+            timestamp: Date.now()
+          });
+          
+          // Join document
+          setTimeout(() => {
+            this.send({
+              type: 'join_document',
+              documentId: DOCUMENT_ID,
+              timestamp: Date.now()
+            });
+          }, 100);
+        };
+        
+        this.ws.onmessage = (event) => {
+          const message = JSON.parse(event.data);
+          this.handleMessage(message);
+        };
+        
+        this.ws.onclose = () => {
+          console.log('Disconnected from server');
+          state.connected = false;
+          updateConnectionStatus(false);
+          
+          // Attempt reconnection
+          if (this.reconnectAttempts < this.maxReconnectAttempts) {
+            setTimeout(() => {
+              this.reconnectAttempts++;
+              console.log(`Reconnecting... (attempt ${this.reconnectAttempts})`);
+              this.connect();
+            }, this.reconnectDelay * Math.pow(2, this.reconnectAttempts));
+          }
+        };
+        
+        this.ws.onerror = (error) => {
+          console.error('WebSocket error:', error);
+        };
+        
+        state.ws = this.ws;
+      }
+      
+      send(message) {
+        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+          this.ws.send(JSON.stringify(message));
+        }
+      }
+      
+      handleMessage(message) {
+        switch (message.type) {
+          case 'document_state':
+            handleDocumentState(message);
+            break;
+          case 'batch_operations':
+            handleBatchOperations(message);
+            break;
+          case 'user_joined':
+            handleUserJoined(message);
+            break;
+          case 'user_left':
+            handleUserLeft(message);
+            break;
+          case 'cursor_update':
+            handleCursorUpdate(message);
+            break;
+          case 'selection_update':
+            handleSelectionUpdate(message);
+            break;
+          case 'error':
+            console.error('Server error:', message.message);
+            break;
+        }
+      }
+    }
+    
+    // Initialize
+    const client = new CollaborationClient();
+    
+    // Handle document state
+    function handleDocumentState(message) {
+      state.document = message.document;
+      
+      // Restore elements from Map structure
+      state.elements = new Map(state.document.state.elements);
+      
+      // Update active users
+      message.activeUsers.forEach(user => {
+        state.activeUsers.set(user.id, user);
+      });
+      
+      renderCanvas();
+      renderActiveUsers();
+    }
+    
+    // Handle batch operations (optimized for low latency)
+    function handleBatchOperations(message) {
+      message.operations.forEach(op => applyOperation(op));
+      renderCanvas();
+    }
+    
+    function applyOperation(op) {
+      switch (op.type) {
+        case 'create_element':
+          state.elements.set(op.element.id, op.element);
+          break;
+        case 'update_element':
+          const el = state.elements.get(op.elementId);
+          if (el) Object.assign(el, op.changes);
+          break;
+        case 'delete_element':
+          state.elements.delete(op.elementId);
+          break;
+        case 'move_element':
+          const moveEl = state.elements.get(op.elementId);
+          if (moveEl) moveEl.transform.position = op.position;
+          break;
+        case 'resize_element':
+          const resizeEl = state.elements.get(op.elementId);
+          if (resizeEl) resizeEl.transform.size = op.size;
+          break;
+        case 'update_text':
+          const textEl = state.elements.get(op.elementId);
+          if (textEl) textEl.content = op.content;
+          break;
+      }
+    }
+    
+    // Send operation to server
+    function sendOperation(operation) {
+      operation.id = 'op-' + Date.now() + '-' + Math.random();
+      operation.documentId = DOCUMENT_ID;
+      operation.userId = USER.id;
+      operation.timestamp = Date.now();
+      operation.version = ++state.operationVersion;
+      
+      // Optimistically apply locally
+      applyOperation(operation);
+      renderCanvas();
+      
+      // Send to server
+      client.send({
+        type: 'operation',
+        operation,
+        timestamp: Date.now()
+      });
+    }
+    
+    // Render canvas (performance-optimized)
+    const canvas = document.getElementById('canvas');
+    
+    function renderCanvas() {
+      if (!state.document) return;
+      
+      // Set canvas size
+      canvas.style.width = state.document.state.width + 'px';
+      canvas.style.height = state.document.state.height + 'px';
+      canvas.style.background = state.document.state.backgroundColor;
+      
+      // Clear and re-render (in production, use virtual DOM diffing)
+      const elementsHtml = Array.from(state.elements.values())
+        .sort((a, b) => a.transform.zIndex - b.transform.zIndex)
+        .map(renderElement)
+        .join('');
+      
+      canvas.innerHTML = elementsHtml;
+      
+      // Attach event listeners
+      attachElementEventListeners();
+    }
+    
+    function renderElement(el) {
+      const { transform } = el;
+      const style = `
+        left: ${transform.position.x}px;
+        top: ${transform.position.y}px;
+        width: ${transform.size.width}px;
+        height: ${transform.size.height}px;
+        transform: rotate(${transform.rotation}deg);
+        z-index: ${transform.zIndex};
+        ${!el.visible ? 'display: none;' : ''}
+      `;
+      
+      const classes = ['element', el.locked ? 'locked' : '', state.selectedElementIds.has(el.id) ? 'selected' : ''].filter(Boolean).join(' ');
+      
+      let content = '';
+      if (el.type === 'text') {
+        const textStyle = `
+          font-size: ${el.fontSize}px;
+          font-family: ${el.fontFamily};
+          color: ${el.color};
+          font-weight: ${el.bold ? 'bold' : 'normal'};
+          font-style: ${el.italic ? 'italic' : 'normal'};
+          text-decoration: ${el.underline ? 'underline' : 'none'};
+          text-align: ${el.align};
+        `;
+        content = `<div class="element-text" style="${textStyle}">${el.content}</div>`;
+      } else if (el.type === 'image') {
+        content = `<img class="element-image" src="${el.src}" alt="${el.alt || ''}">`;
+      } else if (el.type === 'video') {
+        content = `<video class="element-video" src="${el.src}" controls></video>`;
+      }
+      
+      return `
+        <div class="${classes}" data-id="${el.id}" style="${style}">
+          ${content}
+          ${state.selectedElementIds.has(el.id) && !el.locked ? '<div class="resize-handle se"></div>' : ''}
+        </div>
+      `;
+    }
+    
+    // Element interaction
+    let dragState = null;
+    
+    function attachElementEventListeners() {
+      canvas.querySelectorAll('.element').forEach(elDiv => {
+        const id = elDiv.dataset.id;
+        const element = state.elements.get(id);
+        
+        if (element.locked) return;
+        
+        elDiv.addEventListener('mousedown', (e) => {
+          if (e.target.classList.contains('resize-handle')) {
+            startResize(id, e);
+          } else {
+            startDrag(id, e);
+          }
+        });
+        
+        elDiv.addEventListener('click', (e) => {
+          e.stopPropagation();
+          selectElement(id);
+        });
+      });
+      
+      // Deselect on canvas click
+      canvas.addEventListener('click', () => {
+        state.selectedElementIds.clear();
+        renderCanvas();
+      });
+    }
+    
+    function startDrag(elementId, e) {
+      const element = state.elements.get(elementId);
+      dragState = {
+        type: 'move',
+        elementId,
+        startX: e.clientX,
+        startY: e.clientY,
+        initialX: element.transform.position.x,
+        initialY: element.transform.position.y
+      };
+      
+      document.addEventListener('mousemove', handleDrag);
+      document.addEventListener('mouseup', endDrag);
+    }
+    
+    function handleDrag(e) {
+      if (!dragState) return;
+      
+      const dx = e.clientX - dragState.startX;
+      const dy = e.clientY - dragState.startY;
+      
+      if (dragState.type === 'move') {
+        const newPosition = {
+          x: dragState.initialX + dx,
+          y: dragState.initialY + dy
+        };
+        
+        // Optimistic local update
+        const element = state.elements.get(dragState.elementId);
+        element.transform.position = newPosition;
+        
+        // Re-render only the moved element
+        const elDiv = canvas.querySelector(`[data-id="${dragState.elementId}"]`);
+        elDiv.style.left = newPosition.x + 'px';
+        elDiv.style.top = newPosition.y + 'px';
+      }
+    }
+    
+    function endDrag() {
+      if (dragState && dragState.type === 'move') {
+        // Send final position to server
+        sendOperation({
+          type: 'move_element',
+          elementId: dragState.elementId,
+          position: state.elements.get(dragState.elementId).transform.position
+        });
+      }
+      
+      dragState = null;
+      document.removeEventListener('mousemove', handleDrag);
+      document.removeEventListener('mouseup', endDrag);
+    }
+    
+    function startResize(elementId, e) {
+      const element = state.elements.get(elementId);
+      dragState = {
+        type: 'resize',
+        elementId,
+        startX: e.clientX,
+        startY: e.clientY,
+        initialWidth: element.transform.size.width,
+        initialHeight: element.transform.size.height
+      };
+      
+      document.addEventListener('mousemove', handleResize);
+      document.addEventListener('mouseup', endResize);
+      e.stopPropagation();
+    }
+    
+    function handleResize(e) {
+      if (!dragState || dragState.type !== 'resize') return;
+      
+      const dx = e.clientX - dragState.startX;
+      const dy = e.clientY - dragState.startY;
+      
+      const newSize = {
+        width: Math.max(50, dragState.initialWidth + dx),
+        height: Math.max(50, dragState.initialHeight + dy)
+      };
+      
+      const element = state.elements.get(dragState.elementId);
+      element.transform.size = newSize;
+      
+      const elDiv = canvas.querySelector(`[data-id="${dragState.elementId}"]`);
+      elDiv.style.width = newSize.width + 'px';
+      elDiv.style.height = newSize.height + 'px';
+    }
+    
+    function endResize() {
+      if (dragState && dragState.type === 'resize') {
+        sendOperation({
+          type: 'resize_element',
+          elementId: dragState.elementId,
+          size: state.elements.get(dragState.elementId).transform.size
+        });
+      }
+      
+      dragState = null;
+      document.removeEventListener('mousemove', handleResize);
+      document.removeEventListener('mouseup', endResize);
+    }
+    
+    function selectElement(id) {
+      state.selectedElementIds.clear();
+      state.selectedElementIds.add(id);
+      renderCanvas();
+      renderPropertiesPanel(id);
+    }
+    
+    // Properties panel
+    function renderPropertiesPanel(elementId) {
+      const element = state.elements.get(elementId);
+      if (!element) return;
+      
+      const panel = document.getElementById('properties-content');
+      
+      if (element.type === 'text') {
+        panel.innerHTML = `
+          <div class="property-group">
+            <label class="property-label">Text Content</label>
+            <textarea class="property-input" id="prop-text-content" rows="4">${element.content}</textarea>
+          </div>
+          <div class="property-group">
+            <label class="property-label">Font Size</label>
+            <input type="number" class="property-input" id="prop-font-size" value="${element.fontSize}">
+          </div>
+          <div class="property-group">
+            <label class="property-label">Color</label>
+            <input type="color" class="property-input" id="prop-color" value="${element.color}">
+          </div>
+        `;
+        
+        // Add event listeners
+        document.getElementById('prop-text-content').addEventListener('change', (e) => {
+          sendOperation({
+            type: 'update_text',
+            elementId,
+            content: e.target.value
+          });
+        });
+        
+        document.getElementById('prop-font-size').addEventListener('change', (e) => {
+          sendOperation({
+            type: 'update_element',
+            elementId,
+            changes: { fontSize: parseInt(e.target.value) }
+          });
+        });
+        
+        document.getElementById('prop-color').addEventListener('change', (e) => {
+          sendOperation({
+            type: 'update_element',
+            elementId,
+            changes: { color: e.target.value }
+          });
+        });
+      }
+    }
+    
+    // Add element actions
+    document.getElementById('add-text-btn').addEventListener('click', () => {
+      const textElement = {
+        id: 'el-' + Date.now(),
+        type: 'text',
+        content: 'Double-click to edit',
+        transform: {
+          position: { x: 100, y: 100 },
+          size: { width: 300, height: 100 },
+          rotation: 0,
+          zIndex: state.elements.size + 1
+        },
+        fontSize: 24,
+        fontFamily: 'Inter',
+        color: '#000000',
+        bold: false,
+        italic: false,
+        underline: false,
+        align: 'left',
+        locked: false,
+        visible: true,
+        createdAt: Date.now(),
+        createdBy: USER.id,
+        modifiedAt: Date.now(),
+        modifiedBy: USER.id
+      };
+      
+      sendOperation({
+        type: 'create_element',
+        element: textElement
+      });
+    });
+    
+    // Active users display
+    function renderActiveUsers() {
+      const container = document.getElementById('active-users');
+      container.innerHTML = Array.from(state.activeUsers.values())
+        .map(user => `
+          <div class="user-avatar" style="background-color: ${user.color}" title="${user.name}">
+            ${user.name.charAt(0).toUpperCase()}
+          </div>
+        `)
+        .join('');
+    }
+    
+    // User presence handlers
+    function handleUserJoined(message) {
+      state.activeUsers.set(message.user.id, message.user);
+      renderActiveUsers();
+    }
+    
+    function handleUserLeft(message) {
+      state.activeUsers.delete(message.userId);
+      state.remoteCursors.delete(message.userId);
+      renderActiveUsers();
+      renderRemoteCursors();
+    }
+    
+    function handleCursorUpdate(message) {
+      if (message.position) {
+        state.remoteCursors.set(message.userId, message.position);
+      } else {
+        state.remoteCursors.delete(message.userId);
+      }
+      renderRemoteCursors();
+    }
+    
+    function handleSelectionUpdate(message) {
+      // Render selection indicators for remote users
+    }
+    
+    function renderRemoteCursors() {
+      const layer = document.getElementById('cursors-layer');
+      layer.innerHTML = Array.from(state.remoteCursors.entries())
+        .map(([userId, pos]) => {
+          const user = state.activeUsers.get(userId);
+          if (!user) return '';
+          
+          return `
+            <div class="remote-cursor" style="left: ${pos.x}px; top: ${pos.y}px;">
+              <svg class="cursor-pointer" viewBox="0 0 20 20" fill="${user.color}">
+                <path d="M0 0 L0 16 L5 11 L8 20 L10 19 L7 10 L13 10 Z"/>
+              </svg>
+              <div class="cursor-label">${user.name}</div>
+            </div>
+          `;
+        })
+        .join('');
+    }
+    
+    // Send cursor position (throttled)
+    let lastCursorSend = 0;
+    canvas.addEventListener('mousemove', (e) => {
+      const now = Date.now();
+      if (now - lastCursorSend < 50) return; // 20 Hz max
+      
+      const rect = canvas.getBoundingClientRect();
+      const position = {
+        x: e.clientX - rect.left,
+        y: e.clientY - rect.top
+      };
+      
+      client.send({
+        type: 'cursor_update',
+        userId: USER.id,
+        position,
+        timestamp: Date.now()
+      });
+      
+      lastCursorSend = now;
+    });
+    
+    // Connection status
+    function updateConnectionStatus(connected) {
+      const indicator = document.getElementById('status-indicator');
+      const text = document.getElementById('status-text');
+      
+      if (connected) {
+        indicator.classList.remove('disconnected');
+        text.textContent = 'Connected';
+      } else {
+        indicator.classList.add('disconnected');
+        text.textContent = 'Disconnected';
+      }
+    }
+  </script>
+</body>
+</html>

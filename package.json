@@ -1,0 +1,29 @@
+{
+  "name": "collaborative-editor-server",
+  "version": "1.0.0",
+  "description": "Real-time collaborative rich-media editor server - Canva-style architecture",
+  "main": "server.ts",
+  "scripts": {
+    "dev": "ts-node server.ts",
+    "build": "tsc",
+    "start": "node dist/server.js"
+  },
+  "keywords": [
+    "collaboration",
+    "websocket",
+    "real-time",
+    "editor",
+    "crdt"
+  ],
+  "author": "Your Team",
+  "license": "MIT",
+  "dependencies": {
+    "ws": "^8.14.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/ws": "^8.5.0",
+    "ts-node": "^10.9.0",
+    "typescript": "^5.0.0"
+  }
+}
