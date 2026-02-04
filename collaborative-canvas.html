@@ -283,6 +283,8 @@
                 linear-gradient(90deg, var(--border-color) 1px, transparent 1px);
             background-size: 20px 20px;
             opacity: 0.3;
+            pointer-events: none;
+            z-index: 0;
         }
 
         .canvas {
@@ -290,6 +292,7 @@
             min-width: 100%;
             min-height: 100%;
             cursor: crosshair;
+            z-index: 1;
         }
 
         /* Canvas Elements */
@@ -381,6 +384,13 @@
             pointer-events: none;
             z-index: 1000;
             transition: transform 0.1s ease-out;
+        }
+
+        #cursorsContainer {
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            z-index: 2;
         }
 
         .cursor-pointer {
@@ -687,14 +697,15 @@
         
         // Create shared types
         const yElements = ydoc.getMap('elements');
+        const yVersions = ydoc.getArray('versions');
         
         // WebSocket provider configuration
         // Default to same-origin when hosted by the server, fallback to localhost for file://
         const isFileProtocol = window.location.protocol === 'file:';
         const host = window.location.hostname || 'localhost';
-        const port = window.location.port || '1234';
+        const wsPort = new URLSearchParams(window.location.search).get('wsPort') || '1234';
         const wsProtocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
-        const wsUrl = isFileProtocol ? 'ws://localhost:1234' : `${wsProtocol}://${host}:${port}`;
+        const wsUrl = isFileProtocol ? 'ws://localhost:1234' : `${wsProtocol}://${host}:${wsPort}`;
         const roomParam = new URLSearchParams(window.location.search).get('id');
         const roomName = 'canvas-collab-' + (roomParam || window.location.hash.slice(1) || 'default');
         
@@ -720,6 +731,7 @@
         let dragFrame = null;
         const LOCAL_ORIGIN = 'local';
         const undoManager = new Y.UndoManager(yElements, { trackedOrigins: new Set([LOCAL_ORIGIN]) });
+        const MAX_VERSIONS = 20;
 
         // DOM elements
         const canvas = document.getElementById('canvas');
@@ -775,6 +787,7 @@
                 width: type === 'rect' || type === 'circle' ? 120 : (type === 'image' ? 240 : (type === 'video' ? 320 : 'auto')),
                 height: type === 'rect' ? 80 : (type === 'circle' ? 120 : (type === 'image' ? 180 : (type === 'video' ? 180 : 'auto'))),
                 content: type === 'text' ? 'Edit me' : null,
+                src: type === 'image' || type === 'video' ? '' : null,
                 color: userColor,
                 fontSize: 16,
                 createdBy: userId,
@@ -811,10 +824,10 @@
                     el.addEventListener('input', () => updateElementContent(elementData.id, el.textContent));
                     break;
                 case 'image':
-                    el.innerHTML = '🖼';
+                    setMediaContent(el, elementData);
                     break;
                 case 'video':
-                    el.innerHTML = '▶';
+                    setMediaContent(el, elementData);
                     break;
                 case 'rect':
                     el.classList.add('shape-element');
@@ -848,6 +861,9 @@
             }
             if (elementData.type === 'rect' || elementData.type === 'circle') {
                 el.style.borderColor = elementData.color;
+            }
+            if (elementData.type === 'image' || elementData.type === 'video') {
+                setMediaContent(el, elementData);
             }
         }
 
@@ -959,6 +975,15 @@
                 `;
             }
 
+            if (elementData.type === 'image' || elementData.type === 'video') {
+                html += `
+                    <div class="property-group">
+                        <label class="property-label">${elementData.type === 'image' ? 'Image URL' : 'Video URL'}</label>
+                        <input type="text" class="property-input" value="${elementData.src || ''}" data-prop="src" placeholder="https://...">
+                    </div>
+                `;
+            }
+
             html += `
                 <div class="property-group">
                     <button class="btn btn-secondary" style="width: 100%; background: var(--danger); border-color: var(--danger);" onclick="deleteElement('${elementData.id}')">
@@ -973,7 +998,9 @@
             propertiesContent.querySelectorAll('[data-prop]').forEach(input => {
                 input.addEventListener('input', (e) => {
                     const prop = e.target.dataset.prop;
-                    const value = prop === 'fontSize' ? parseInt(e.target.value) : parseFloat(e.target.value);
+                    const value = prop === 'fontSize'
+                        ? parseInt(e.target.value, 10)
+                        : (prop === 'src' ? e.target.value.trim() : parseFloat(e.target.value));
                     const element = yElements.get(elementData.id);
                     if (element) {
                         ydoc.transact(() => {
@@ -985,6 +1012,29 @@
                     }
                 });
             });
+        }
+
+        function setMediaContent(el, elementData) {
+            if (elementData.type === 'image') {
+                if (elementData.src) {
+                    el.innerHTML = `<img src="${elementData.src}" alt="Image" style="width: 100%; height: 100%; object-fit: cover; display: block;" />`;
+                } else {
+                    el.innerHTML = `<div style="display:flex; flex-direction:column; align-items:center; gap:6px; color: var(--text-tertiary); font-size: 12px;">
+                        <div style="font-size: 40px;">🖼</div>
+                        <div>Add image URL</div>
+                    </div>`;
+                }
+            }
+            if (elementData.type === 'video') {
+                if (elementData.src) {
+                    el.innerHTML = `<video src="${elementData.src}" controls style="width: 100%; height: 100%; display: block; background: #000;"></video>`;
+                } else {
+                    el.innerHTML = `<div style="display:flex; flex-direction:column; align-items:center; gap:6px; color: var(--text-tertiary); font-size: 12px;">
+                        <div style="font-size: 40px;">▶</div>
+                        <div>Add video URL</div>
+                    </div>`;
+                }
+            }
         }
 
         window.deleteElement = function(id) {
@@ -1074,6 +1124,19 @@
         // Save version
         document.getElementById('saveBtn').addEventListener('click', () => {
             const timestamp = new Date().toISOString();
+            const snapshot = Array.from(yElements.values()).map(item => ({ ...item }));
+            ydoc.transact(() => {
+                yVersions.push([{
+                    id: `version-${Date.now()}`,
+                    timestamp,
+                    userId,
+                    userName: awareness.getLocalState().user?.name || 'Unknown',
+                    elements: snapshot
+                }]);
+                if (yVersions.length > MAX_VERSIONS) {
+                    yVersions.delete(0, yVersions.length - MAX_VERSIONS);
+                }
+            }, LOCAL_ORIGIN);
             document.getElementById('versionTimestamp').textContent = new Date().toLocaleTimeString();
             statusText.textContent = 'Version saved';
             setTimeout(() => statusText.textContent = 'Connected', 2000);
