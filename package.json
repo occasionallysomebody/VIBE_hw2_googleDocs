@@ -1,16 +1,17 @@
 {
-  "name": "collaborative-canvas-pro",
-  "version": "2.0.0",
-  "description": "Production-grade collaborative design canvas with CRDT-based conflict resolution",
+  "name": "collaborative-text-editor",
+  "version": "1.0.0",
+  "description": "Thread-safe multi-client text editing web app - Google Docs × Notion",
   "main": "server.js",
   "type": "commonjs",
   "scripts": {
     "start": "node server.js",
+    "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
     "dev:server": "nodemon server.js",
     "dev:client": "vite --port 5173",
-    "dev": "vite --port 5173",
+    "build": "vite build",
     "preview": "vite preview --port 4173",
-    "test": "echo \"No tests yet\" && exit 0"
+    "test": "echo \"Run 'npm run dev' and open http://localhost:5173 to test\" && exit 0"
   },
   "keywords": [
     "collaboration",
@@ -18,8 +19,9 @@
     "yjs",
     "websocket",
     "real-time",
-    "canvas",
-    "design-tool"
+    "text-editor",
+    "google-docs",
+    "notion"
   ],
   "author": "",
   "license": "MIT",
@@ -30,7 +32,8 @@
   },
   "devDependencies": {
     "nodemon": "^3.0.2",
-    "vite": "^5.4.3"
+    "vite": "^5.4.3",
+    "concurrently": "^8.2.2"
   },
   "engines": {
     "node": ">=16.0.0"

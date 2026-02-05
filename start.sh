@@ -39,7 +39,7 @@ echo -e "${GREEN}✓${NC} Server ready"
 # Start server in background
 echo ""
 echo -e "${BLUE}Starting collaboration server...${NC}"
-npm run dev &
+npm start &
 SERVER_PID=$!
 echo "Server PID: $SERVER_PID"
 

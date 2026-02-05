@@ -129,11 +129,86 @@ const server = http.createServer((req, res) => {
         return;
     }
 
-    // Serve client file if it exists
-    if (req.url === '/' || req.url === '/index.html') {
-        const clientPath = path.join(__dirname, 'collaborative-canvas.html');
-        if (fs.existsSync(clientPath)) {
-            fs.readFile(clientPath, (err, data) => {
+    // Serve static files from dist (production) or redirect to Vite dev server
+    const distPath = path.join(__dirname, 'dist');
+    const isProduction = fs.existsSync(distPath);
+    
+    if (isProduction) {
+        // Production: serve built files from dist
+        let filePath = path.join(distPath, req.url === '/' ? 'index.html' : req.url);
+        
+        // Security: prevent directory traversal
+        if (!filePath.startsWith(distPath)) {
+            res.writeHead(403);
+            res.end('Forbidden');
+            return;
+        }
+        
+        // Check if file exists
+        if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
+            const ext = path.extname(filePath);
+            const contentType = {
+                '.html': 'text/html',
+                '.js': 'application/javascript',
+                '.css': 'text/css',
+                '.json': 'application/json',
+                '.png': 'image/png',
+                '.jpg': 'image/jpeg',
+                '.svg': 'image/svg+xml',
+            }[ext] || 'application/octet-stream';
+            
+            fs.readFile(filePath, (err, data) => {
+                if (err) {
+                    res.writeHead(500);
+                    res.end('Error loading file');
+                    return;
+                }
+                res.writeHead(200, { 'Content-Type': contentType });
+                res.end(data);
+            });
+            return;
+        }
+        
+        // Fallback to index.html for SPA routing
+        if (req.url === '/' || !path.extname(req.url)) {
+            const indexPath = path.join(distPath, 'index.html');
+            if (fs.existsSync(indexPath)) {
+                fs.readFile(indexPath, (err, data) => {
+                    if (err) {
+                        res.writeHead(500);
+                        res.end('Error loading page');
+                        return;
+                    }
+                    res.writeHead(200, { 'Content-Type': 'text/html' });
+                    res.end(data);
+                });
+                return;
+            }
+        }
+    } else {
+        // Development: redirect to Vite dev server or serve legacy canvas
+        if (req.url === '/' || req.url === '/index.html') {
+            res.writeHead(200, { 'Content-Type': 'text/html' });
+            res.end(`
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <title>Collaborative Text Editor</title>
+                    <meta http-equiv="refresh" content="0; url=http://localhost:5173">
+                </head>
+                <body>
+                    <p>Redirecting to Vite dev server... <a href="http://localhost:5173">Click here</a></p>
+                    <script>window.location.href = 'http://localhost:5173';</script>
+                </body>
+                </html>
+            `);
+            return;
+        }
+        
+        // Legacy canvas support
+        const canvasPath = path.join(__dirname, 'collaborative-canvas.html');
+        if (req.url === '/collaborative-canvas.html' && fs.existsSync(canvasPath)) {
+            fs.readFile(canvasPath, (err, data) => {
                 if (err) {
                     res.writeHead(500);
                     res.end('Error loading page');
@@ -232,7 +307,8 @@ server.listen(PORT, HOST, () => {
     console.log(`  • WebSocket: ws://${HOST}:${PORT}`);
     console.log(`  • Health: http://${HOST}:${PORT}/health`);
     console.log(`  • Metrics: http://${HOST}:${PORT}/metrics`);
-    console.log(`  • Client: http://${HOST}:${PORT}/\n`);
+    console.log(`  • Client (Dev): http://localhost:5173`);
+    console.log(`  • Client (Prod): http://${HOST}:${PORT}/\n`);
 });
 
 // Setup garbage collection

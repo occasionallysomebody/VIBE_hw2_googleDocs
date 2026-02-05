@@ -1,13 +1,21 @@
 import { defineConfig } from 'vite';
 
 export default defineConfig({
-  root: '.',
   server: {
     port: 5173,
-    strictPort: true
+    proxy: {
+      '/ws': {
+        target: 'ws://localhost:1234',
+        ws: true,
+      },
+    },
   },
-  preview: {
-    port: 4173,
-    strictPort: true
-  }
+  build: {
+    outDir: 'dist',
+    rollupOptions: {
+      input: {
+        main: './index.html',
+      },
+    },
+  },
 });

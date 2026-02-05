@@ -289,8 +289,10 @@
 
         .canvas {
             position: relative;
-            min-width: 100%;
-            min-height: 100%;
+            min-width: 1920px;
+            min-height: 1080px;
+            width: 1920px;
+            height: 1080px;
             cursor: crosshair;
             z-index: 1;
         }
@@ -765,9 +767,15 @@
             });
         });
 
-        // Create element on canvas click
+        // Create element on canvas click (or deselect when using Select tool)
         canvas.addEventListener('click', (e) => {
-            if (currentTool === 'select') return;
+            if (currentTool === 'select') {
+                document.querySelectorAll('.canvas-element').forEach(el => el.classList.remove('selected'));
+                selectedElement = null;
+                updatePropertiesPanel(null);
+                return;
+            }
+            if (e.target !== canvas) return; // Don't create when clicking on an element
             
             const rect = canvas.getBoundingClientRect();
             const x = e.clientX - rect.left + canvasWrapper.scrollLeft;
@@ -822,6 +830,10 @@
                     el.textContent = elementData.content || 'Edit me';
                     el.style.fontSize = (elementData.fontSize || 16) + 'px';
                     el.addEventListener('input', () => updateElementContent(elementData.id, el.textContent));
+                    el.addEventListener('dblclick', (e) => {
+                        e.stopPropagation();
+                        el.focus();
+                    });
                     break;
                 case 'image':
                     setMediaContent(el, elementData);
@@ -877,7 +889,8 @@
         }
 
         function startDrag(e, el, elementData) {
-            if (e.target.contentEditable === 'true' && e.target === document.activeElement) return;
+            // When text element is focused for editing, don't start drag (let user select text)
+            if (e.target.contentEditable === 'true' && document.activeElement === e.target) return;
             
             isDragging = true;
             selectedElement = el;
@@ -949,6 +962,10 @@
         }
 
         function updatePropertiesPanel(elementData) {
+            if (!elementData) {
+                propertiesContent.innerHTML = '<div style="color: var(--text-tertiary); font-size: 13px; text-align: center; padding: 40px 0;">Select an element to edit properties</div>';
+                return;
+            }
             let html = `
                 <div class="property-group">
                     <label class="property-label">Type</label>
@@ -975,11 +992,23 @@
                 `;
             }
 
-            if (elementData.type === 'image' || elementData.type === 'video') {
+            if (elementData.type === 'image') {
                 html += `
                     <div class="property-group">
-                        <label class="property-label">${elementData.type === 'image' ? 'Image URL' : 'Video URL'}</label>
-                        <input type="text" class="property-input" value="${elementData.src || ''}" data-prop="src" placeholder="https://...">
+                        <label class="property-label">Image URL</label>
+                        <input type="text" class="property-input" value="${(elementData.src || '').replace(/"/g, '&quot;')}" data-prop="src" placeholder="https://... or upload below">
+                    </div>
+                    <div class="property-group">
+                        <label class="property-label">Upload Image</label>
+                        <input type="file" class="property-input" accept="image/*" data-upload="image" style="padding: 8px;">
+                    </div>
+                `;
+            }
+            if (elementData.type === 'video') {
+                html += `
+                    <div class="property-group">
+                        <label class="property-label">Video URL</label>
+                        <input type="text" class="property-input" value="${(elementData.src || '').replace(/"/g, '&quot;')}" data-prop="src" placeholder="https://... (mp4, webm) or YouTube URL">
                     </div>
                 `;
             }
@@ -1012,26 +1041,66 @@
                     }
                 });
             });
+
+            // Add file upload listener for images
+            propertiesContent.querySelectorAll('[data-upload="image"]').forEach(input => {
+                input.addEventListener('change', (e) => {
+                    const file = e.target.files?.[0];
+                    if (file && file.type.startsWith('image/')) {
+                        const reader = new FileReader();
+                        reader.onload = () => {
+                            const element = yElements.get(elementData.id);
+                            if (element) {
+                                ydoc.transact(() => {
+                                    yElements.set(elementData.id, { ...element, src: reader.result });
+                                }, LOCAL_ORIGIN);
+                            }
+                        };
+                        reader.readAsDataURL(file);
+                    }
+                    e.target.value = '';
+                });
+            });
+        }
+
+        function parseVideoUrl(url) {
+            if (!url || typeof url !== 'string') return null;
+            const trimmed = url.trim();
+            // YouTube: youtu.be/ID or youtube.com/watch?v=ID
+            const ytShort = trimmed.match(/youtu\.be\/([a-zA-Z0-9_-]+)/);
+            if (ytShort) return { type: 'youtube', id: ytShort[1] };
+            const ytLong = trimmed.match(/[?&]v=([a-zA-Z0-9_-]+)/);
+            if (ytLong) return { type: 'youtube', id: ytLong[1] };
+            // Direct video URL
+            if (/\.(mp4|webm|ogg)(\?|$)/i.test(trimmed)) return { type: 'direct', url: trimmed };
+            return { type: 'direct', url: trimmed };
         }
 
         function setMediaContent(el, elementData) {
             if (elementData.type === 'image') {
                 if (elementData.src) {
-                    el.innerHTML = `<img src="${elementData.src}" alt="Image" style="width: 100%; height: 100%; object-fit: cover; display: block;" />`;
+                    const safeSrc = String(elementData.src).replace(/"/g, '&quot;').replace(/</g, '&lt;');
+                    el.innerHTML = `<img src="${safeSrc}" alt="Image" style="width: 100%; height: 100%; object-fit: cover; display: block;" />`;
                 } else {
                     el.innerHTML = `<div style="display:flex; flex-direction:column; align-items:center; gap:6px; color: var(--text-tertiary); font-size: 12px;">
                         <div style="font-size: 40px;">🖼</div>
-                        <div>Add image URL</div>
+                        <div>Add URL or upload image</div>
                     </div>`;
                 }
             }
             if (elementData.type === 'video') {
                 if (elementData.src) {
-                    el.innerHTML = `<video src="${elementData.src}" controls style="width: 100%; height: 100%; display: block; background: #000;"></video>`;
+                    const parsed = parseVideoUrl(elementData.src);
+                    if (parsed.type === 'youtube') {
+                        el.innerHTML = `<iframe src="https://www.youtube.com/embed/${parsed.id}" style="width: 100%; height: 100%; border: none;" allowfullscreen></iframe>`;
+                    } else {
+                        const safeSrc = String(elementData.src).replace(/"/g, '&quot;').replace(/</g, '&lt;');
+                        el.innerHTML = `<video src="${safeSrc}" controls style="width: 100%; height: 100%; display: block; background: #000;"></video>`;
+                    }
                 } else {
                     el.innerHTML = `<div style="display:flex; flex-direction:column; align-items:center; gap:6px; color: var(--text-tertiary); font-size: 12px;">
                         <div style="font-size: 40px;">▶</div>
-                        <div>Add video URL</div>
+                        <div>Add video URL (YouTube or mp4)</div>
                     </div>`;
                 }
             }
@@ -1045,6 +1114,10 @@
             if (el) el.remove();
             propertiesContent.innerHTML = '<div style="color: var(--text-tertiary); font-size: 13px; text-align: center; padding: 40px 0;">Select an element to edit properties</div>';
         };
+
+        // Initial render of existing elements (e.g. from persistence or other clients)
+        yElements.forEach((value) => renderElement(value));
+        updateLayersList();
 
         // Observe Y.js changes
         yElements.observe(event => {
