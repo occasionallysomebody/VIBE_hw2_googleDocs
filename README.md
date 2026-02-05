@@ -1,3 +1,7 @@
+# Group Member Names: 
+1. Ann Kim
+2. Gaurav Mandhyan
+
 # Collaborative Text Editor
 
 A real-time collaborative text editor built using the **Persona Pattern** for AI-assisted development.
