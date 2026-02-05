@@ -1,0 +1,529 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Collaborative Text Editor</title>
+    <script src="/socket.io/socket.io.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            background: #0a0a0a;
+            color: #ededed;
+            overflow: hidden;
+        }
+
+        .header {
+            background: rgba(20, 20, 20, 0.8);
+            backdrop-filter: blur(20px);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+            padding: 16px 24px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            z-index: 100;
+        }
+
+        .header h1 {
+            font-size: 15px;
+            font-weight: 500;
+            color: #ededed;
+            letter-spacing: -0.01em;
+        }
+
+        .status {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .connection-status {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 10px;
+            border-radius: 6px;
+            font-size: 13px;
+            font-weight: 400;
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+        }
+
+        .connection-status.connected {
+            border-color: rgba(16, 185, 129, 0.3);
+        }
+
+        .connection-status.disconnected {
+            border-color: rgba(239, 68, 68, 0.3);
+        }
+
+        .status-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            animation: pulse 2s ease-in-out infinite;
+        }
+
+        .status-dot.connected {
+            background: #10b981;
+            box-shadow: 0 0 8px rgba(16, 185, 129, 0.6);
+        }
+
+        .status-dot.disconnected {
+            background: #ef4444;
+            box-shadow: 0 0 8px rgba(239, 68, 68, 0.6);
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.6; transform: scale(0.95); }
+        }
+
+        .active-users {
+            font-size: 13px;
+            color: #a1a1a1;
+            font-weight: 400;
+        }
+
+        .container {
+            flex: 1;
+            display: flex;
+            padding: 0;
+            gap: 0;
+            overflow: hidden;
+        }
+
+        .sidebar {
+            width: 280px;
+            background: rgba(15, 15, 15, 0.6);
+            backdrop-filter: blur(20px);
+            border-right: 1px solid rgba(255, 255, 255, 0.06);
+            padding: 20px 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .sidebar h2 {
+            color: #ededed;
+            font-size: 13px;
+            font-weight: 500;
+            letter-spacing: -0.01em;
+            margin-bottom: 4px;
+            text-transform: uppercase;
+            opacity: 0.5;
+        }
+
+        .create-document {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 8px;
+        }
+
+        .create-document input {
+            flex: 1;
+            padding: 8px 12px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            font-size: 14px;
+            background: rgba(255, 255, 255, 0.03);
+            color: #ededed;
+            transition: all 0.2s ease;
+        }
+
+        .create-document input::placeholder {
+            color: #666;
+        }
+
+        .create-document input:focus {
+            outline: none;
+            border-color: rgba(255, 255, 255, 0.2);
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            letter-spacing: -0.01em;
+        }
+
+        .btn-primary {
+            background: #ededed;
+            color: #0a0a0a;
+        }
+
+        .btn-primary:hover {
+            background: #ffffff;
+            transform: translateY(-1px);
+        }
+
+        .btn-primary:active {
+            transform: translateY(0);
+        }
+
+        .document-list {
+            flex: 1;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            padding-right: 4px;
+        }
+
+        .document-item {
+            padding: 10px 12px;
+            background: transparent;
+            border: 1px solid transparent;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .document-item:hover {
+            background: rgba(255, 255, 255, 0.05);
+            border-color: rgba(255, 255, 255, 0.1);
+        }
+
+        .document-item.active {
+            background: rgba(255, 255, 255, 0.08);
+            border-color: rgba(255, 255, 255, 0.15);
+        }
+
+        .document-name {
+            font-weight: 500;
+            color: #ededed;
+            margin-bottom: 4px;
+            font-size: 14px;
+            letter-spacing: -0.01em;
+        }
+
+        .document-info {
+            font-size: 12px;
+            color: #737373;
+            font-weight: 400;
+        }
+
+        .editor-container {
+            flex: 1;
+            background: #0a0a0a;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .editor-header {
+            padding: 20px 32px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+            background: rgba(15, 15, 15, 0.4);
+            backdrop-filter: blur(20px);
+        }
+
+        .document-title {
+            font-size: 18px;
+            color: #ededed;
+            font-weight: 500;
+            letter-spacing: -0.02em;
+        }
+
+        #editor {
+            flex: 1;
+            padding: 32px;
+            border: none;
+            font-family: 'SF Mono', 'Monaco', 'Cascadia Code', 'Courier New', monospace;
+            font-size: 15px;
+            line-height: 1.8;
+            resize: none;
+            background: transparent;
+            color: #ededed;
+            caret-color: #ededed;
+        }
+
+        #editor::selection {
+            background: rgba(255, 255, 255, 0.15);
+        }
+
+        #editor:focus {
+            outline: none;
+        }
+
+        .no-document {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #525252;
+            font-size: 14px;
+            font-weight: 400;
+            letter-spacing: -0.01em;
+        }
+
+        /* Custom scrollbar for dark theme */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 3px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.15);
+        }
+
+        /* Subtle animations */
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(4px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .document-item {
+            animation: fadeIn 0.2s ease-out backwards;
+        }
+
+        .document-item:nth-child(1) { animation-delay: 0.03s; }
+        .document-item:nth-child(2) { animation-delay: 0.06s; }
+        .document-item:nth-child(3) { animation-delay: 0.09s; }
+        .document-item:nth-child(4) { animation-delay: 0.12s; }
+        .document-item:nth-child(5) { animation-delay: 0.15s; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Collaborative Editor</h1>
+        <div class="status">
+            <div class="connection-status disconnected" id="connectionStatus">
+                <div class="status-dot disconnected" id="statusDot"></div>
+                <span id="statusText">Disconnected</span>
+            </div>
+            <div class="active-users" id="activeUsers">
+                0 active
+            </div>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="sidebar">
+            <h2>Documents</h2>
+            <div class="create-document">
+                <input type="text" id="newDocName" placeholder="New document..." />
+                <button class="btn btn-primary" id="createBtn">+</button>
+            </div>
+            <div class="document-list" id="documentList">
+                <!-- Documents will be populated here -->
+            </div>
+        </div>
+
+        <div class="editor-container">
+            <div id="noDocument" class="no-document">
+                Select or create a document to start editing
+            </div>
+            <div id="editorArea" style="display: none; flex: 1; flex-direction: column;">
+                <div class="editor-header">
+                    <div class="document-title" id="currentDocTitle">Untitled</div>
+                </div>
+                <textarea id="editor" placeholder="Start typing..."></textarea>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Connect to WebSocket server
+        const socket = io();
+        
+        // State
+        let currentDocumentId = null;
+        let isUpdating = false; // Prevent echo when receiving updates
+
+        // DOM elements
+        const connectionStatus = document.getElementById('connectionStatus');
+        const statusDot = document.getElementById('statusDot');
+        const statusText = document.getElementById('statusText');
+        const activeUsersEl = document.getElementById('activeUsers');
+        const documentList = document.getElementById('documentList');
+        const newDocName = document.getElementById('newDocName');
+        const createBtn = document.getElementById('createBtn');
+        const editor = document.getElementById('editor');
+        const currentDocTitle = document.getElementById('currentDocTitle');
+        const noDocument = document.getElementById('noDocument');
+        const editorArea = document.getElementById('editorArea');
+
+        /**
+         * Update connection status UI
+         */
+        function updateConnectionStatus(connected) {
+            if (connected) {
+                connectionStatus.className = 'connection-status connected';
+                statusDot.className = 'status-dot connected';
+                statusText.textContent = 'Connected';
+            } else {
+                connectionStatus.className = 'connection-status disconnected';
+                statusDot.className = 'status-dot disconnected';
+                statusText.textContent = 'Disconnected';
+            }
+        }
+
+        /**
+         * Request and display document list
+         */
+        function loadDocuments() {
+            socket.emit('list-documents');
+        }
+
+        /**
+         * Render document list in sidebar
+         */
+        function renderDocuments(docs) {
+            documentList.innerHTML = '';
+            docs.forEach(doc => {
+                const item = document.createElement('div');
+                item.className = 'document-item';
+                if (doc.id === currentDocumentId) {
+                    item.classList.add('active');
+                }
+                item.innerHTML = `
+                    <div class="document-name">${doc.name}</div>
+                    <div class="document-info">${doc.activeUsers} active</div>
+                `;
+                item.onclick = () => joinDocument(doc.id);
+                documentList.appendChild(item);
+            });
+        }
+
+        /**
+         * Join a document
+         */
+        function joinDocument(docId) {
+            currentDocumentId = docId;
+            socket.emit('join-document', docId);
+            
+            // Update UI
+            noDocument.style.display = 'none';
+            editorArea.style.display = 'flex';
+            
+            // Update active state in document list
+            document.querySelectorAll('.document-item').forEach(item => {
+                item.classList.remove('active');
+            });
+            loadDocuments(); // Refresh list to show updated active users
+        }
+
+        /**
+         * Create new document
+         */
+        createBtn.onclick = () => {
+            const name = newDocName.value.trim();
+            if (name) {
+                socket.emit('create-document', { name });
+                newDocName.value = '';
+            }
+        };
+
+        // Allow Enter key to create document
+        newDocName.onkeypress = (e) => {
+            if (e.key === 'Enter') {
+                createBtn.onclick();
+            }
+        };
+
+        /**
+         * Handle text changes in editor
+         */
+        editor.oninput = () => {
+            if (!isUpdating && currentDocumentId) {
+                socket.emit('text-change', {
+                    content: editor.value
+                });
+            }
+        };
+
+        // ===== Socket Event Handlers =====
+
+        socket.on('connect', () => {
+            console.log('Connected to server');
+            updateConnectionStatus(true);
+            loadDocuments();
+        });
+
+        socket.on('disconnect', () => {
+            console.log('Disconnected from server');
+            updateConnectionStatus(false);
+        });
+
+        socket.on('document-list', (docs) => {
+            renderDocuments(docs);
+        });
+
+        socket.on('document-content', (doc) => {
+            isUpdating = true;
+            currentDocTitle.textContent = doc.name;
+            editor.value = doc.content;
+            isUpdating = false;
+        });
+
+        socket.on('text-update', (data) => {
+            // Update editor with changes from other users
+            isUpdating = true;
+            
+            // Save cursor position
+            const cursorPos = editor.selectionStart;
+            const oldLength = editor.value.length;
+            
+            editor.value = data.content;
+            
+            // Try to maintain cursor position
+            const lengthDiff = editor.value.length - oldLength;
+            editor.selectionStart = editor.selectionEnd = cursorPos + lengthDiff;
+            
+            isUpdating = false;
+        });
+
+        socket.on('user-joined', (data) => {
+            console.log('User joined:', data.userId);
+            activeUsersEl.textContent = `${data.activeUsers} active`;
+            loadDocuments(); // Refresh to show updated counts
+        });
+
+        socket.on('user-left', (data) => {
+            console.log('User left:', data.userId);
+            activeUsersEl.textContent = `${data.activeUsers} active`;
+            loadDocuments(); // Refresh to show updated counts
+        });
+
+        socket.on('document-created', (doc) => {
+            console.log('New document created:', doc.name);
+            loadDocuments(); // Refresh document list
+        });
+
+        socket.on('join-document-response', (data) => {
+            joinDocument(data.documentId);
+        });
+
+        // Initial load
+        window.onload = () => {
+            if (socket.connected) {
+                loadDocuments();
+            }
+        };
+    </script>
+</body>
+</html>
